@@ -25,7 +25,7 @@ Streamlit chat interface for real-time Q&A.
 
 
 
-git clone https://github.com/yourusername/document-gpt.git
+[git clone https://github.com/yourusername/document-gpt.git](https://github.com/Razamirxa/RAG-With-Qdrant.git)
 cd document-gpt
 ### Create a Virtual Environment:
 
