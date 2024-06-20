@@ -2,7 +2,6 @@ import os
 import streamlit as st
 from streamlit_chat import message
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
@@ -76,7 +75,7 @@ def get_files_text(uploaded_files):
             temp_file_path = temp_file.name
 
         if file_extension == ".pdf":
-            loader = PyMuPDFLoader(temp_file_path)
+            loader = PyPDFLoader(temp_file_path)
             pages = loader.load()
         elif file_extension == ".csv":
             loader = CSVLoader(file_path=temp_file_path)
