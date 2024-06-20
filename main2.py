@@ -2,6 +2,7 @@ import os
 import streamlit as st
 from streamlit_chat import message
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
@@ -20,7 +21,7 @@ import tempfile
 def main():
     load_dotenv()
     st.set_page_config(page_title="Chat with your file")
-    st.header("DocumentGPT (Chat with your file)")
+    st.header("DocumentGPT")
 
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
@@ -44,15 +45,22 @@ def main():
 
         process = st.button("Process")
         if process:
-            files_text = get_files_text(uploaded_files)
+            pages = get_files_text(uploaded_files)
             st.write("File loaded...")
-            text_chunks = get_text_chunks(files_text)
-            st.write("File chunks created...")
-            vectorstore = get_vectorstore(text_chunks, qdrant_api_key, qdrant_url)
-            st.write("Vector Store Created...")
-            st.session_state.conversation = vectorstore
-            st.session_state.processComplete = True
-            st.session_state.session_id = os.urandom(16).hex()  # Initialize a unique session ID
+            if pages:
+                st.write(f"Total pages loaded: {len(pages)}")
+                text_chunks = get_text_chunks(pages)
+                st.write(f"File chunks created: {len(text_chunks)} chunks")
+                if text_chunks:
+                    vectorstore = get_vectorstore(text_chunks, qdrant_api_key, qdrant_url)
+                    st.write("Vector Store Created...")
+                    st.session_state.conversation = vectorstore
+                    st.session_state.processComplete = True
+                    st.session_state.session_id = os.urandom(16).hex()  # Initialize a unique session ID
+                else:
+                    st.error("Failed to create text chunks.")
+            else:
+                st.error("No pages loaded from files.")
 
     if st.session_state.processComplete:
         input_query = st.chat_input("Ask Question about your files.")
@@ -67,7 +75,7 @@ def main():
                     message(message_data["content"], is_user=message_data["is_user"], key=str(i))
 
 def get_files_text(uploaded_files):
-    text = ""
+    documents = []
     for uploaded_file in uploaded_files:
         file_extension = os.path.splitext(uploaded_file.name)[1]
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
@@ -75,7 +83,7 @@ def get_files_text(uploaded_files):
             temp_file_path = temp_file.name
 
         if file_extension == ".pdf":
-            loader = PyPDFLoader(temp_file_path)
+            loader = PyMuPDFLoader(temp_file_path)
             pages = loader.load()
         elif file_extension == ".csv":
             loader = CSVLoader(file_path=temp_file_path)
@@ -88,48 +96,40 @@ def get_files_text(uploaded_files):
             pages = loader.load()
         else:
             st.error("Unsupported file format.")
-            return ""
+            return []
 
-        for page in pages:
-            text += page.page_content
+        documents.extend(pages)
 
         # Remove the temporary file
         os.remove(temp_file_path)
         
-    return text
+    return documents
 
 def get_vectorstore(text_chunks, qdrant_api_key, qdrant_url):
     embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vectorstore = Qdrant.from_texts(texts=text_chunks, embedding=embeddings_model, collection_name="Machine_learning", url=qdrant_url, api_key=qdrant_api_key)
     return vectorstore
 
-def get_text_chunks(text):
+def get_text_chunks(pages):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=900,
         chunk_overlap=100,
         length_function=len,
         is_separator_regex=False,
     )
-    documents = [Document(page_content=text)]
-    texts = text_splitter.split_documents(documents)
-    return [chunk.page_content for chunk in texts]
+    texts = []
+    for page in pages:
+        chunks = text_splitter.split_text(page.page_content)
+        texts.extend(chunks)
+    return texts
 
 def rag(vector_db, input_query, google_api_key):
     try:
-        template = """You are an advanced AI assistant with expertise in document analysis. Your task is to provide precise and accurate answers to user questions based on the given context from uploaded documents. Follow these guidelines:
-
-1. Use only the information provided in the context to answer the question.
-2. If the context does not contain the information needed, respond with "I do not know based on the provided context."
-3. Keep your answers clear, concise, and under 6 lines.
-4. Do not provide information that is not present in the context.
-
-Context:
-{context}
-
-Question:
-{question}
-
-Answer:
+        template = """You are an AI assistant that assists users by providing answers to their questions by extracting information from the provided context:
+        {context}.
+        If you do not find any relevant information from context for the given question, simply say 'I do not know'. Do not try to make up an answer.
+        Answer should not be greater than 6 lines.
+        Question: {question}
         """
 
         prompt = ChatPromptTemplate.from_template(template)
@@ -149,7 +149,6 @@ Answer:
         return response
     except Exception as ex:
         return str(ex)
-
 
 if __name__ == '__main__':
     main()
