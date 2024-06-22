@@ -107,7 +107,7 @@ def get_files_text(uploaded_files):
 
 def get_vectorstore(text_chunks, qdrant_api_key, qdrant_url):
     embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    vectorstore = Qdrant.from_texts(texts=text_chunks, embedding=embeddings_model, collection_name="Machine_learning", url=qdrant_url, api_key=qdrant_api_key)
+    vectorstore = Qdrant.from_texts(texts=text_chunks, embedding=embeddings_model, collection_name="Machine_learning", url=qdrant_url, api_key=qdrant_api_key,force_recreate=True)
     return vectorstore
 
 def get_text_chunks(pages):
@@ -123,6 +123,18 @@ def get_text_chunks(pages):
         texts.extend(chunks)
     return texts
 
+def qdrant_client():
+        embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        qdrant_key = st.secrets["qdrant_api_key"]
+        URL = st.secrets["qdrant_url"]
+        qdrant_client = QdrantClient(
+        url=URL,
+        api_key=qdrant_key,
+        )
+        qdrant_store = Qdrant(qdrant_client,"Machine_learning" ,embedding_model)
+        return qdrant_store
+
+vector_db = qdrant_client()
 def rag(vector_db, input_query, google_api_key):
     try:
         template = """You are an AI assistant that assists users by providing answers to their questions by extracting information from the provided context:
